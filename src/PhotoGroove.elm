@@ -1,10 +1,20 @@
 module PhotoGroove exposing (main)
 
+import Browser
 import Html exposing (div, h1, img, text)
 import Html.Attributes exposing (..)
+import Html.Events exposing (onClick)
 
 
-initialModel : { photos : List { url : String }, selectedUrl : String }
+type alias Model =
+    { photos : List { url : String }, selectedUrl : String }
+
+
+type alias Msg =
+    { description : String, data : String }
+
+
+initialModel : Model
 initialModel =
     { photos =
         [ { url = "1.jpeg" }
@@ -21,28 +31,32 @@ urlPrefix =
     "http://elm-in-action.com/"
 
 
-viewThumbnail : String -> { a | url : String } -> Html.Html msg
+viewThumbnail : String -> { a | url : String } -> Html.Html Msg
 viewThumbnail selectedUrl thumb =
-    if selectedUrl == thumb.url then
-        img
-            [ src (urlPrefix ++ thumb.url)
-            , classList [ ( "selected", selectedUrl == thumb.url ) ]
-            ]
-            []
+    img
+        [ src (urlPrefix ++ thumb.url)
+        , classList [ ( "selected", selectedUrl == thumb.url ) ]
+        , onClick { description = "ClickedPhoto", data = thumb.url }
+        ]
+        []
+
+
+update : Msg -> Model -> Model
+update msg model =
+    if msg.description == "ClickedPhoto" then
+        { model | selectedUrl = msg.data }
 
     else
-        img
-            [ src (urlPrefix ++ thumb.url) ]
-            []
+        model
 
 
-view : { photos : List { url : String }, selectedUrl : String } -> Html.Html msg
+view : Model -> Html.Html Msg
 view model =
     div [ class "content" ]
         [ h1 [] [ text "Photo Groove" ]
         , div [ id "thumbnails" ]
             (List.map
-                (\photo -> viewThumbnail model.selectedUrl photo)
+                (viewThumbnail model.selectedUrl)
                 model.photos
             )
         , img
@@ -53,6 +67,10 @@ view model =
         ]
 
 
-main : Html.Html msg
+main : Program () Model Msg
 main =
-    view initialModel
+    Browser.sandbox
+        { init = initialModel
+        , view = view
+        , update = update
+        }
