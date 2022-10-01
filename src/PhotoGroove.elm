@@ -1,12 +1,18 @@
 module PhotoGroove exposing (main)
 
-import Array exposing (Array)
+import Array exposing (..)
 import Browser
 import Html exposing (button, div, h1, img, input, label, text)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
 import Http
+import Json.Decode exposing (int, string, succeed)
+import Json.Decode.Pipeline exposing (optional)
 import Random
+
+
+requiredField =
+    Json.Decode.Pipeline.required
 
 
 type ThumbnailSize
@@ -16,7 +22,17 @@ type ThumbnailSize
 
 
 type alias Photo =
-    { url : String }
+    { url : String
+    , size : Int
+    , title : String
+    }
+
+
+photoDecoder =
+    succeed Photo
+        |> requiredField "url" string
+        |> requiredField "size" int
+        |> optional "title" string "untitled"
 
 
 type Status
@@ -34,7 +50,7 @@ type Msg
     | ClickedSize ThumbnailSize
     | ClickedSurpriseMe
     | GotRandomPhoto Photo
-    | GetPhotos (Result Http.Error String)
+    | GotPhotos (Result Http.Error (List Photo))
 
 
 initialModel : Model
@@ -47,10 +63,10 @@ initialModel =
 initialCmd : Cmd Msg
 initialCmd =
     Http.get
-        { url = "http://elm-in-action.com/photos/list"
-        , expect = Http.expectString GetPhotos
+        { url = "http://elm-in-action.com/photos/list.json"
+        , expect = Http.expectJson GotPhotos (Json.Decode.list photoDecoder)
 
-        -- , expect = Http.expectString (\result -> GetPhotos result)
+        -- , expect = Http.expectString (\result -> GotPhotos result)
         }
 
 
@@ -63,6 +79,7 @@ viewThumbnail : String -> Photo -> Html.Html Msg
 viewThumbnail selectedUrl thumb =
     img
         [ src (urlPrefix ++ thumb.url)
+        , title (thumb.title ++ " [" ++ String.fromInt thumb.size ++ " KB]")
         , classList [ ( "selected", selectedUrl == thumb.url ) ]
         , onClick (ClickedPhoto thumb.url)
         ]
@@ -94,16 +111,6 @@ sizeToString size =
 
         Large ->
             "large"
-
-
-
--- getPhotoUrl : Int -> String
--- getPhotoUrl index =
---     case Array.get index photoArray of
---         Just photo ->
---             photo.url
---         Nothing ->
---             ""
 
 
 selectUrl : String -> Status -> Status
@@ -148,25 +155,19 @@ update msg model =
                 Loading ->
                     ( model, Cmd.none )
 
-                Errored errorMessage ->
+                Errored _ ->
                     ( model, Cmd.none )
 
-        GetPhotos result ->
-            case result of
-                Ok responseStr ->
-                    case String.split "," responseStr of
-                        (firstUrl :: _) as urls ->
-                            let
-                                photos =
-                                    List.map Photo urls
-                            in
-                            ( { model | status = Loaded photos firstUrl }, Cmd.none )
+        GotPhotos (Ok photos) ->
+            case photos of
+                first :: _ ->
+                    ( { model | status = Loaded photos first.url }, Cmd.none )
 
-                        [] ->
-                            ( { model | status = Errored "No photos found" }, Cmd.none )
+                [] ->
+                    ( { model | status = Errored "No photos found" }, Cmd.none )
 
-                Err httError ->
-                    ( { model | status = Errored "Server error!" }, Cmd.none )
+        GotPhotos (Err _) ->
+            ( { model | status = Errored "Server error!" }, Cmd.none )
 
 
 viewLoaded : List Photo -> String -> ThumbnailSize -> List (Html.Html Msg)
@@ -201,10 +202,6 @@ view model =
 
             Errored errorMessage ->
                 [ text ("Error: " ++ errorMessage) ]
-
-
-
--- main : Program Never Model Msg
 
 
 main : Program () Model Msg
