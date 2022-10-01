@@ -5,6 +5,7 @@ import Browser
 import Html exposing (button, div, h1, img, input, label, text)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick)
+import Http
 import Random
 
 
@@ -33,6 +34,7 @@ type Msg
     | ClickedSize ThumbnailSize
     | ClickedSurpriseMe
     | GotRandomPhoto Photo
+    | GetPhotos (Result Http.Error String)
 
 
 initialModel : Model
@@ -40,6 +42,16 @@ initialModel =
     { status = Loading
     , chosenSize = Medium
     }
+
+
+initialCmd : Cmd Msg
+initialCmd =
+    Http.get
+        { url = "http://elm-in-action.com/photos/list"
+        , expect = Http.expectString GetPhotos
+
+        -- , expect = Http.expectString (\result -> GetPhotos result)
+        }
 
 
 urlPrefix : String
@@ -139,6 +151,23 @@ update msg model =
                 Errored errorMessage ->
                     ( model, Cmd.none )
 
+        GetPhotos result ->
+            case result of
+                Ok responseStr ->
+                    case String.split "," responseStr of
+                        (firstUrl :: _) as urls ->
+                            let
+                                photos =
+                                    List.map Photo urls
+                            in
+                            ( { model | status = Loaded photos firstUrl }, Cmd.none )
+
+                        [] ->
+                            ( { model | status = Errored "No photos found" }, Cmd.none )
+
+                Err httError ->
+                    ( { model | status = Errored "Server error!" }, Cmd.none )
+
 
 viewLoaded : List Photo -> String -> ThumbnailSize -> List (Html.Html Msg)
 viewLoaded photos selectedUrl chosenSize =
@@ -174,11 +203,15 @@ view model =
                 [ text ("Error: " ++ errorMessage) ]
 
 
+
+-- main : Program Never Model Msg
+
+
 main : Program () Model Msg
 main =
     Browser.element
-        { init = \flags -> ( initialModel, Cmd.none )
+        { init = \_ -> ( initialModel, initialCmd )
         , view = view
         , update = update
-        , subscriptions = \mode -> Sub.none
+        , subscriptions = \_ -> Sub.none
         }
