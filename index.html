@@ -5,6 +5,19 @@
         connectedCallback() {
             const input = document.createElement("input")
             this.appendChild(input)
+            const jsr = new JSR(input, {
+                max: this.max,
+                values: [this.val],
+                sliders: 1,
+                grid: false
+            })
+            const rangeSliderNode = this
+            jsr.addEventListener("update", function(elem, value) {
+                const event = new CustomEvent("slide", {
+                    detail: {userSlidTo: value}
+                })
+                rangeSliderNode.dispatchEvent(event)
+            })
         }
     }
 
@@ -17,13 +30,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="http://elm-in-action.com/styles.css">
     <title>Photo-Groove app - Cooked with Elm</title>
+    <link rel="stylesheet" href="http://elm-in-action.com/styles.css">
+    <link rel="stylesheet" href="http://elm-in-action.com/range-slider.css">
+    <script src="http://elm-in-action.com/range-slider.js"></script> 
 </head>
 
 <body>
     <div id="app"></div>
+    <script src="http://elm-in-action.com/pasta.js"></script>
     <script src="app.js"></script>
     <script>
-        Elm.PhotoGroove.init({ node: document.getElementById("app") });
+        const app = Elm.PhotoGroove.init({ node: document.getElementById("app") });
+        app.ports.setFilters.subscribe(function(options) {
+            Pasta.apply(document.getElementById("main-canvas"), options);
+        })
     </script>
 </body>
 
