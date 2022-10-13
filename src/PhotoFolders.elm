@@ -11,9 +11,47 @@ import Json.Decode.Pipeline exposing (required)
 import PhotoGroove exposing (view)
 
 
+type Folder
+    = Folder
+        { name : String
+        , photoUrls : List String
+        , subFolders : List Folder
+        , expanded : Bool
+        }
+
+
+type FolderPath
+    = End
+    | SubFolder Int FolderPath
+
+
+toggleExpand : FolderPath -> Folder -> Folder
+toggleExpand path (Folder folder) =
+    case path of
+        End ->
+            Folder { folder | expanded = not folder.expanded }
+
+        SubFolder targetIndex remainingPath ->
+            let
+                subFolders : List Folder
+                subFolders =
+                    List.indexedMap transform folder.subFolders
+
+                transform : Int -> Folder -> Folder
+                transform currentIndex currentSubFolder =
+                    if currentIndex == targetIndex then
+                        toggleExpand remainingPath currentSubFolder
+
+                    else
+                        currentSubFolder
+            in
+            Folder { folder | subFolders = subFolders }
+
+
 type alias Model =
     { selectedPhotoUrl : Maybe String
     , photos : Dict String Photo
+    , root : Folder
     }
 
 
@@ -21,6 +59,7 @@ initialModel : Model
 initialModel =
     { selectedPhotoUrl = Nothing
     , photos = Dict.empty
+    , root = Folder { name = "Loading", photoUrls = [], subFolders = [], expanded = True }
     }
 
 
@@ -62,12 +101,59 @@ modelDecoder =
                     }
                   )
                 ]
+        , root =
+            Folder
+                { name = "Photos"
+                , photoUrls = []
+                , subFolders =
+                    [ Folder
+                        { name = "2016"
+                        , photoUrls = [ "trevi", "coli" ]
+                        , subFolders =
+                            [ Folder
+                                { name = "outdoors"
+                                , photoUrls = []
+                                , subFolders = []
+                                , expanded = True
+                                }
+                            , Folder
+                                { name = "indoors"
+                                , photoUrls = [ "fresco" ]
+                                , subFolders = []
+                                , expanded = True
+                                }
+                            ]
+                        , expanded = True
+                        }
+                    , Folder
+                        { name = "2017"
+                        , photoUrls = []
+                        , subFolders =
+                            [ Folder
+                                { name = "outdoors"
+                                , photoUrls = []
+                                , subFolders = []
+                                , expanded = True
+                                }
+                            , Folder
+                                { name = "indoors"
+                                , photoUrls = []
+                                , subFolders = []
+                                , expanded = True
+                                }
+                            ]
+                        , expanded = True
+                        }
+                    ]
+                , expanded = True
+                }
         }
 
 
 type Msg
     = ClickedPhoto String
     | GotInitialModel (Result Http.Error Model)
+    | ClickedFolder FolderPath
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -81,6 +167,9 @@ update msg model =
 
         GotInitialModel (Err _) ->
             ( model, Cmd.none )
+
+        ClickedFolder path ->
+            ( { model | root = toggleExpand path model.root }, Cmd.none )
 
 
 type alias Photo =
@@ -113,6 +202,40 @@ viewRelatedPhoto url =
         []
 
 
+viewFolder : FolderPath -> Folder -> Html Msg
+viewFolder path (Folder folder) =
+    let
+        viewSubFolder : Int -> Folder -> Html Msg
+        viewSubFolder index subFolder =
+            viewFolder (appendIndex index path) subFolder
+
+        folderLabel =
+            label [ onClick (ClickedFolder path) ] [ text folder.name ]
+    in
+    if folder.expanded then
+        let
+            contents =
+                List.indexedMap viewSubFolder folder.subFolders
+        in
+        div [ class "folder expanded" ]
+            [ folderLabel
+            , div [ class "subfolders" ] contents
+            ]
+
+    else
+        div [ class "folder collapsed" ] [ folderLabel ]
+
+
+appendIndex : Int -> FolderPath -> FolderPath
+appendIndex index path =
+    case path of
+        End ->
+            SubFolder index End
+
+        SubFolder subFolderIndex remainingPath ->
+            SubFolder subFolderIndex (appendIndex index remainingPath)
+
+
 urlPrefix : String
 urlPrefix =
     "http://elm-in-action.com/"
@@ -135,7 +258,11 @@ view model =
                     text ""
     in
     div [ class "content" ]
-        [ div [ class "selected-photo" ] [ selectedPhoto ]
+        [ div [ class "folders" ]
+            [ h1 [] [ text "Folders" ]
+            , viewFolder End model.root
+            ]
+        , div [ class "selected-photo" ] [ selectedPhoto ]
         ]
 
 
